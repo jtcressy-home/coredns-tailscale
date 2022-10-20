@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/test"
@@ -12,10 +13,11 @@ import (
 )
 
 type Tailscale struct {
-	Next     plugin.Handler
-	tsClient tailscale.LocalClient
-	entries  map[string]map[string]string
-	zone     string
+	Next            plugin.Handler
+	tsClient        tailscale.LocalClient
+	entries         map[string]map[string]string
+	zone            string
+	pollingInterval time.Duration
 }
 
 func NewTailscale(next plugin.Handler) *Tailscale {
@@ -65,9 +67,12 @@ func (t *Tailscale) pollPeers() {
 		if v.Tags != nil {
 			for i := 0; i < v.Tags.Len(); i++ {
 				raw := v.Tags.At(i)
-				if strings.HasPrefix(raw, "tag:cname-") {
+				if v.Online && strings.HasPrefix(raw, "tag:cname-") {
 					tag := strings.TrimPrefix(raw, "tag:cname-")
-					t.entries[tag] = map[string]string{}
+					_, ok := t.entries[tag]
+					if !ok {
+						t.entries[tag] = map[string]string{}
+					}
 					t.entries[tag]["CNAME"] = fmt.Sprintf("%s.%s.", v.HostName, t.zone)
 				}
 			}
