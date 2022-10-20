@@ -28,7 +28,7 @@ func (t *Tailscale) resolveA(domainName string, msg *dns.Msg) {
 	if ok {
 		log.Debugf("Found an v4 entry after lookup for: %s", name)
 		msg.Answer = append(msg.Answer, &dns.A{
-			Hdr: dns.RR_Header{Name: domainName, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+			Hdr: dns.RR_Header{Name: domainName, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: uint32(t.pollingInterval.Seconds())},
 			A:   net.ParseIP(entry),
 		})
 	} else {
@@ -46,7 +46,7 @@ func (t *Tailscale) resolveAAAA(domainName string, msg *dns.Msg) {
 	if ok {
 		log.Debugf("Found a v6 entry after lookup for: %s", name)
 		msg.Answer = append(msg.Answer, &dns.AAAA{
-			Hdr:  dns.RR_Header{Name: domainName, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60},
+			Hdr:  dns.RR_Header{Name: domainName, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: uint32(t.pollingInterval.Seconds())},
 			AAAA: net.ParseIP(entry),
 		})
 	} else {
