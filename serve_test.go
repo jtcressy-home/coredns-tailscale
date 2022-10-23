@@ -8,13 +8,18 @@ import (
 
 var ts = Tailscale{
 	zone: "example.com",
-	entries: map[string]map[string]string{
+	entries: map[string]map[string][]string{
 		"test1": {
-			"A":    "127.0.0.1",
-			"AAAA": "::1",
+			"A":    []string{"127.0.0.1"},
+			"AAAA": []string{"::1"},
 		},
 		"test2": {
-			"CNAME": "test1.example.com",
+			"CNAME": []string{"test1.example.com"},
+		},
+		"test3": {
+			"A":     []string{"127.0.0.1", "127.0.0.2", "127.0.0.3"},
+			"AAAA":  []string{"::1", "::2", "::3"},
+			"CNAME": []string{"test2.example.com"},
 		},
 	},
 }
@@ -132,10 +137,46 @@ func TestResolveAAAAIsCNAME(t *testing.T) {
 
 }
 
+func TestResolveAMultiple(t *testing.T) {
+	msg := dns.Msg{}
+	domain := "test3.example.com"
+
+	ts.resolveA(domain, &msg)
+
+	testEquals(t, "answer count", 3, len(msg.Answer))
+
+	for _, rr := range msg.Answer {
+		switch rec := rr.(type) {
+		case *dns.A:
+			expected_rrs := []string{"127.0.0.1", "127.0.0.2", "127.0.0.3"}
+			testEqualsAnyString(t, "A Records", expected_rrs, rec.A.String())
+		case *dns.AAAA:
+			expected_rrs := []string{"::1", "::2", "::3"}
+			testEqualsAnyString(t, "AAAA Records", expected_rrs, rec.AAAA.String())
+		}
+	}
+
+}
+
 func testEquals(t *testing.T, msg string, expected interface{}, received interface{}) {
 
 	if expected != received {
 		t.Errorf("Expected %s %s: received %s", msg, expected, received)
 	}
 
+}
+
+func testEqualsAnyString(t *testing.T, msg string, expectedList []string, received string) {
+	result := "fail"
+	for _, expected := range expectedList {
+		if expected != received {
+			continue
+		} else if expected == received {
+			result = "pass"
+			break
+		}
+	}
+	if result == "fail" {
+		t.Errorf("Expected one %s of %s: received %s", msg, expectedList, received)
+	}
 }

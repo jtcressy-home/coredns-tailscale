@@ -15,7 +15,7 @@ import (
 type Tailscale struct {
 	Next            plugin.Handler
 	tsClient        tailscale.LocalClient
-	entries         map[string]map[string]string
+	entries         map[string]map[string][]string
 	zone            string
 	pollingInterval time.Duration
 }
@@ -30,7 +30,7 @@ func NewTailscale(next plugin.Handler) *Tailscale {
 func (t *Tailscale) Name() string { return "tailscale" }
 
 func (t *Tailscale) pollPeers() {
-	t.entries = map[string]map[string]string{}
+	t.entries = map[string]map[string][]string{}
 
 	res, err := t.tsClient.Status(context.Background())
 	if err != nil {
@@ -52,13 +52,13 @@ func (t *Tailscale) pollPeers() {
 
 			_, ok := t.entries[strings.ToLower(v.HostName)]
 			if !ok {
-				t.entries[strings.ToLower(v.HostName)] = map[string]string{}
+				t.entries[strings.ToLower(v.HostName)] = map[string][]string{}
 			}
 
 			if addr.Is4() {
-				t.entries[strings.ToLower(v.HostName)]["A"] = addr.String()
+				t.entries[strings.ToLower(v.HostName)]["A"] = []string{addr.String()}
 			} else if addr.Is6() {
-				t.entries[strings.ToLower(v.HostName)]["AAAA"] = addr.String()
+				t.entries[strings.ToLower(v.HostName)]["AAAA"] = []string{addr.String()}
 			}
 
 		}
@@ -71,9 +71,27 @@ func (t *Tailscale) pollPeers() {
 					tag := strings.TrimPrefix(raw, "tag:cname-")
 					_, ok := t.entries[tag]
 					if !ok {
-						t.entries[tag] = map[string]string{}
+						t.entries[tag] = map[string][]string{}
 					}
-					t.entries[tag]["CNAME"] = fmt.Sprintf("%s.%s.", v.HostName, t.zone)
+					t.entries[tag]["CNAME"] = []string{fmt.Sprintf("%s.%s.", v.HostName, t.zone)}
+				}
+				// Additionally process tags looking for dnslb- prefix
+				//  collects all IP addresses for every machine with matching tags
+				//  and results in multiple A and AAAA records.
+				// tip: use with 'loadbalance' in coredns for better dns-based loadbalancing
+				if v.Online && strings.HasPrefix(raw, "tag:dnslb-") {
+					tag := strings.TrimPrefix(raw, "tag:dnslb-")
+					_, ok := t.entries[tag]
+					if !ok {
+						t.entries[tag] = map[string][]string{}
+					}
+					for _, addr := range v.TailscaleIPs {
+						if addr.Is4() {
+							t.entries[tag]["A"] = append(t.entries[tag]["A"], addr.String())
+						} else if addr.Is6() {
+							t.entries[tag]["AAAA"] = append(t.entries[tag]["AAAA"], addr.String())
+						}
+					}
 				}
 			}
 		}
