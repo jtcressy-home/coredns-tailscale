@@ -1,5 +1,8 @@
 example.com:53 {
-  tailscale example.com
+  tailscale example.com {
+    poll_interval 15s
+  }
+  loadbalance
   log 
   errors
 }
